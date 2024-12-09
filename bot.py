@@ -100,12 +100,18 @@ async def talk(update: Update, context: ContextTypes.DEFAULT_TYPE):
 #Обработка кнопок с меню
 async def talk_button(update:Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
-    choice = update.callback_query.data
-    prompt = load_prompt(choice)
-    chat_gpt.set_prompt(prompt)
-    answer = await chat_gpt.send_question(prompt, '')
-    await send_image(update,context,choice)
-    await send_text(update,context,answer)
+    cb = update.callback_query.data
+    if cb == 'talk_another':
+        await talk(update, context)
+    elif cb == 'talk_end':
+        await start(update, context)
+    else:
+        prompt = load_prompt(cb)
+        chat_gpt.set_prompt(prompt)
+        answer = await chat_gpt.send_question(prompt, '')
+        await send_image(update, context, cb)
+        await send_text(update, context, answer)
+
 
 #Разговор с личностью
 async def talk_dialog(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -113,6 +119,10 @@ async def talk_dialog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = await send_text(update, context, 'Думаю над вопросом...')
     answer = await chat_gpt.add_message(text)
     await message.edit_text(answer)
+    await send_text_buttons(update, context, "Что дальше?", {
+        'talk_another': 'Выбрать другую личность',
+        'talk_end': 'Завершить разговор'
+    })
 
 
 # 4 Задание
@@ -225,7 +235,7 @@ async def recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"User {update.effective_user.full_name} called /recipes | {datetime.datetime.now()}")
     dialog.mode = 'recipes'
     message = ("Привет! Я твой помощник на кухне и не переживай что у меня лапки 🐾. "
-               "Введите ингредиенты, которые у вас есть и  я подберу для вас рецепты.")
+               "Введите ингредиенты через запятую, которые у вас есть и  я подберу для вас рецепты.")
     await send_image(update, context, 'recipes')
     await send_text(update, context, message)
 
