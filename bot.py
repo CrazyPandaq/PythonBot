@@ -24,7 +24,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'gpt': 'Задать вопрос чату GPT 🤖',
         'talk': 'Поговорить с известной личностью 👤',
         'quiz': 'Поучаствовать в квизе ❓',
-        'translate' : 'Перевести предложение 🌍'
+        'translate' : 'Перевести предложение 🌍',
+        'recipes' : 'Помощь с готовкой 🍴'
     })
 
 # 1 Задание
@@ -44,8 +45,8 @@ async def random_fact(update: Update, context: ContextTypes.DEFAULT_TYPE):
 #Обработка кнопок в рандомном факте
 async def random_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
-    answer = update.callback_query.data
-    if answer == 'random_more':
+    cb = update.callback_query.data
+    if cb == 'random_more':
         await random_fact(update, context)
     else:
         await start(update, context)
@@ -75,8 +76,8 @@ async def gpt_dialog(update: Update, context: ContextTypes.DEFAULT_TYPE):
 #Обработка кнопок в разговоре с gpt
 async def gpt_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
-    answer = update.callback_query.data
-    if answer == 'gpt_more':
+    cb = update.callback_query.data
+    if cb == 'gpt_more':
         await gpt(update, context)
     else:
         await start(update, context)
@@ -168,6 +169,7 @@ async def quiz_dialog(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 5 Задание
 #Переводчик
 async def translate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print(f"User {update.effective_user.full_name} called /translate | {datetime.datetime.now()}")
     dialog.mode = 'translate'
     await send_image(update, context, 'translate')
     message = "Выберите язык, на который нужно перевести текст:"
@@ -216,10 +218,38 @@ async def translate_dialog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     })
 
 
-async def translate_continue_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# 6 Задание
+#Помощь с готовкой
+# Команда для начала поиска рецептов
+async def recipes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print(f"User {update.effective_user.full_name} called /recipes | {datetime.datetime.now()}")
+    dialog.mode = 'recipes'
+    message = ("Привет! Я твой помощник на кухне и не переживай что у меня лапки 🐾. "
+               "Введите ингредиенты, которые у вас есть и  я подберу для вас рецепты.")
+    await send_image(update, context, 'recipes')
+    await send_text(update, context, message)
+
+# Обработка введенных ингредиентов
+async def recipes_dialog(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ingredients = update.message.text
+    message = await send_text(update, context, 'Ищу рецепты...')
+    prompt = f"Привет! Представь что ты повар. Составь ,пожалуйста, несколько рецептов из следующих ингредиентов: {ingredients}. Придумай 2-3 рецепта, с подробным описанием."
+    recipes = await chat_gpt.send_question(prompt, '')
+    await message.edit_text(recipes)
+    await send_text_buttons(update, context, "Что дальше?", {
+        'recipes_another': 'Подобрать другие рецепты',
+        'recipes_end': 'Вернуться в главное меню'
+    })
+
+
+async def recipes_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
-    await send_text(update, context, 'Введите текст для перевода:')
-    dialog.mode = 'translate'
+    cb = update.callback_query.data
+    if cb == 'recipes_another':
+        await recipes(update, context)
+    elif cb == 'recipes_end':
+        await start(update, context)
+
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f'{update.message.text} - {update.effective_user.full_name} | {datetime.datetime.now()}')
@@ -231,6 +261,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await quiz_dialog(update, context)
     elif dialog.mode == 'translate':
         await translate_dialog(update,context)
+    elif dialog.mode == 'recipes':
+        await recipes_dialog(update,context)
     else:
         await context.bot.send_message(chat_id=update.effective_chat.id, text=update.message.text)
 
@@ -242,6 +274,7 @@ dialog = Dialog()
 dialog.mode = None
 
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, recipes_dialog))
 
 # Зарегистрировать обработчик команды можно так:
 app.add_handler(CommandHandler('start', start))
@@ -250,6 +283,7 @@ app.add_handler(CommandHandler('gpt', gpt))
 app.add_handler(CommandHandler('talk', talk))
 app.add_handler(CommandHandler('quiz', quiz))
 app.add_handler(CommandHandler('translate', translate))
+app.add_handler(CommandHandler('recipes', recipes))
 
 # Зарегистрировать обработчик коллбэка можно так:
 app.add_handler(CallbackQueryHandler(random_button, pattern='^random_.*'))
@@ -257,7 +291,7 @@ app.add_handler(CallbackQueryHandler(gpt_button, pattern='^gpt_.*'))
 app.add_handler(CallbackQueryHandler(talk_button, pattern='^talk_.*'))
 app.add_handler(CallbackQueryHandler(quiz_button, pattern='^quiz_.*'))
 app.add_handler(CallbackQueryHandler(translate_language_button, pattern='^translate_.*'))
-
+app.add_handler(CallbackQueryHandler(recipes_button, pattern='^recipes_.*'))
 
 app.add_handler(CallbackQueryHandler(default_callback_handler))
 app.run_polling()
