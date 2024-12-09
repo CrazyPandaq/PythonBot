@@ -1,8 +1,4 @@
 import datetime
-from random import choice
-
-from httpx import request
-from pydantic_core.core_schema import none_schema
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, ContextTypes, CommandHandler, MessageHandler, filters
 from credentials import ChatGPT_TOKEN, BOT_TOKEN
@@ -128,50 +124,52 @@ async def talk_dialog(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 4 Задание
 #КВИЗ
 async def quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print(f"User {update.effective_user.full_name} called /quiz | {datetime.datetime.now()}")
     dialog.mode = 'quiz'
+    if not context.user_data:
+        context.user_data['current_mode'] = None
+        context.user_data['quiz'] = None
+        context.user_data['count'] = 0
     message = load_message('quiz')
-    context.user_data['current_quiz'] = None
-    context.user_data['quiz_theme'] = None
-    context.user_data['count'] = 0
-    await send_image(update,context,'quiz')
+    await send_image(update, context, 'quiz')
     await send_text_buttons(update, context, message, {
         'quiz_prog': 'Программирование на Python',
         'quiz_math': 'Математические теории',
         'quiz_biology': 'Биология'
     })
 
+
 async def quiz_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
-    prompt = load_prompt('quiz')
-    choice = update.callback_query.data
-    if choice == 'quiz_more':
-        choice = context.user_data['current_quiz']
-    elif choice == 'quiz_exit':
-        await send_text(update, context, f'Правильных ответов: {context.user_data['count']}')
-        context.user_data['current_quiz'] = None
-        context.user_data['quiz_theme'] = None
+    cb = update.callback_query.data
+    if cb == 'quiz_more':
+        cb = context.user_data['current_mode']
+    elif cb == 'quiz_another':
+        await quiz(update, context)
+        return
+    elif cb == 'quiz_exit':
+        await send_text(update, context, f'Правильных ответов: {context.user_data.get("count", 0)}')
+        context.user_data['current_mode'] = None
+        context.user_data['quiz'] = None
         context.user_data['count'] = 0
         await start(update, context)
         return
-    else:
-        context.user_data['current_quiz'] = choice
-    answer = await chat_gpt.send_question(prompt, choice)
+    context.user_data['current_mode'] = cb
+    prompt = load_prompt('quiz')
+    answer = await chat_gpt.send_question(prompt, cb)
     await send_text(update, context, answer)
-    context.user_data['quiz_theme'] = 'next'
-
+    context.user_data['quiz'] = 'next'
 
 async def quiz_dialog(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.user_data['current_quiz'] or not context.user_data['quiz_theme']:
+    if not context.user_data['current_mode'] or not context.user_data['quiz']:
         return
-    context.user_data['quiz_theme'] = None
+    context.user_data['quiz'] = None
     text = update.message.text
     answer = await chat_gpt.add_message(text)
     if answer == 'Правильно!':
         context.user_data['count'] += 1
     await send_text_buttons(update, context, answer, {
         'quiz_more': 'Следующий вопрос',
-        'quiz_another': 'Другая тема',
+        'quiz_another': 'Сменить тему',
         'quiz_exit': 'Завершить'
     })
 
@@ -244,8 +242,8 @@ async def recipes_dialog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ingredients = update.message.text
     message = await send_text(update, context, 'Ищу рецепты...')
     prompt = f"Привет! Представь что ты повар. Составь ,пожалуйста, несколько рецептов из следующих ингредиентов: {ingredients}. Придумай 2-3 рецепта, с подробным описанием."
-    recipes = await chat_gpt.send_question(prompt, '')
-    await message.edit_text(recipes)
+    recept = await chat_gpt.send_question(prompt, '')
+    await message.edit_text(recept)
     await send_text_buttons(update, context, "Что дальше?", {
         'recipes_another': 'Подобрать другие рецепты',
         'recipes_end': 'Вернуться в главное меню'
